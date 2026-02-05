@@ -27,6 +27,11 @@ output "ssh_command" {
   value = "ssh -i <YOUR_KEY> ubuntu@${aws_eip.rancher_server.public_ip}"
 }
 
+output "fetch_kubeconfig_command" {
+  description = "Command to fetch the kubeconfig from the server and rewrite the API server endpoint to the public IP."
+  value       = "scp -i <YOUR_KEY> ubuntu@${aws_eip.rancher_server.public_ip}:/etc/rancher/k3s/k3s.yaml ./k3s.yaml && sed -i 's/127.0.0.1/${aws_eip.rancher_server.public_ip}/' ./k3s.yaml"
+}
+
 output "rancher_hostname" {
   value = "rancher.${aws_eip.rancher_server.public_ip}.nip.io"
 }

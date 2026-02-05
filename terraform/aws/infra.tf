@@ -65,6 +65,15 @@ resource "aws_vpc_security_group_ingress_rule" "https" {
   cidr_ipv4         = local.admin_cidr_norm
 }
 
+resource "aws_vpc_security_group_ingress_rule" "http" {
+  count             = var.allow_http_01 ? 1 : 0
+  security_group_id = aws_security_group.rancher.id
+  ip_protocol       = "tcp"
+  from_port         = 80
+  to_port           = 80
+  cidr_ipv4         = var.http_01_cidr
+}
+
 resource "aws_vpc_security_group_ingress_rule" "k8s_api" {
   security_group_id = aws_security_group.rancher.id
   ip_protocol       = "tcp"

@@ -1,0 +1,13 @@
+# Path to the kubeconfig fetched from the EC2 instance (see aws output fetch_kubeconfig_command)
+kubeconfig_path = "../aws/k3s.yaml"
+
+# Hostname used by Rancher (e.g. rancher.<EIP>.nip.io)
+rancher_hostname = "rancher.X.X.X.X.nip.io"
+
+# Let's Encrypt settings
+letsencrypt_email = "you@example.com"
+# letsencrypt_environment = "staging" # or "production"
+
+# Optional versions
+# rancher_version = "v2.9.2"
+# cert_manager_version = "1.5.3"

@@ -1,92 +1,43 @@
-# Variables for AWS infrastructure module
-
-
-variable "rancher_kubernetes_version" {
+variable "kubeconfig_path" {
   type        = string
-  description = "Kubernetes version to use for Rancher server cluster"
-  default     = "v1.21.4+k3s1"
+  description = "Path to the kubeconfig file used by the Kubernetes/Helm providers."
 }
 
-
-variable "cert_manager_version" {
+variable "rancher_hostname" {
   type        = string
-  description = "Version of cert-manager to install alongside Rancher (format: 0.0.0)"
-  default     = "1.5.3"
+  description = "Rancher hostname (e.g. rancher.<EIP>.nip.io). Do not include the scheme."
 }
 
 variable "rancher_version" {
   type        = string
-  description = "Rancher server version (format: v0.0.0)"
+  description = "Rancher Helm chart version (e.g. v2.9.2)."
   default     = "v2.9.2"
 }
 
-# Required
-variable "rancher_server_admin_password" {
+variable "cert_manager_version" {
   type        = string
-  description = "Admin password to use for Rancher server bootstrap"
+  description = "cert-manager Helm chart version (e.g. 1.5.3)."
+  default     = "1.5.3"
 }
 
-# Required
-variable "add_windows_node" {
-  type        = bool
-  description = "Add a windows node to the workload cluster"
-  default     = false
-}
-
-# Local variables used to reduce repetition
-locals {
-  node_username = "ubuntu"
-}
-# Variables for rancher common module
-
-# Required
-variable "node_public_ip" {
+variable "letsencrypt_email" {
   type        = string
-  description = "Public IP of compute node for Rancher cluster"
+  description = "Email used by Let's Encrypt to issue the Rancher TLS certificate."
 }
 
-variable "node_internal_ip" {
+variable "letsencrypt_environment" {
   type        = string
-  description = "Internal IP of compute node for Rancher cluster"
-  default     = ""
+  description = "Let's Encrypt environment: staging or production."
+  default     = "staging"
+  validation {
+    condition = contains(["staging", "production"], var.letsencrypt_environment)
+    error_message = "letsencrypt_environment must be 'staging' or 'production'."
+  }
 }
 
-# Required
-variable "node_username" {
-  type        = string
-  description = "Username used for SSH access to the Rancher server cluster node"
-}
+  variable "rancher_bootstrap_insecure" {
+    type        = bool
+    description = "Allow insecure TLS only for bootstrap when Rancher uses self-signed certs."
+    default     = true
+  }
 
-# Required
-variable "ssh_private_key_pem" {
-  type        = string
-  description = "Private key used for SSH access to the Rancher server cluster node"
-}
-
-# Required
-variable "rancher_server_dns" {
-  type        = string
-  description = "DNS host name of the Rancher server"
-}
-
-variable "windows_prefered_cluster" {
-  type        = bool
-  description = "Activate windows supports for the custom workload cluster"
-  default     = false
-}
-
-variable "prefix" {
-  type = string
-  default = "perf"
-}
-
-
-
-variable "kubeconfig_context" {
-  type        = string
-  description = "Context kubeconfig à utiliser"
-  default     = null
-}
-
-variable "kubeconfig_path" { type = string }
-variable "rancher_hostname" { type = string }

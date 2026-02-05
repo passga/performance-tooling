@@ -1,21 +1,3 @@
-# Variables for AWS infrastructure module
-
-// TODO - use null defaults
-
-
-variable "rancher_aws_access_key" {
-  type        = string
-  sensitive   = true
-  description = "AWS access key used by Rancher cloud credential (PoC)"
-}
-
-variable "rancher_aws_secret_key" {
-  type        = string
-  sensitive   = true
-  description = "AWS secret key used by Rancher cloud credential (PoC)"
-}
-
-
 variable "aws_region" {
   type        = string
   description = "AWS region used for all resources"
@@ -24,14 +6,8 @@ variable "aws_region" {
 
 variable "availability_zone" {
   type        = string
-  description = "AWS availability zone used for volume"
+  description = "AWS availability zone"
   default     = "eu-west-3a"
-}
-
-# Required
-variable "rancher_server_dns" {
-  description = "Rancher server dns"
-  type        = string
 }
 
 variable "prefix" {
@@ -42,92 +18,38 @@ variable "prefix" {
 
 variable "rancher_server_instance_type" {
   type        = string
-  description = "Instance type used for rancher server ec2 instances"
+  description = "EC2 instance type for the k3s/Rancher server"
   default     = "t3.medium"
-}
-
-variable "workload_nodes_instance_type" {
-  type        = string
-  description = "Instance type used for all workload nodes instances deployed"
-  default     = "t3.medium"
-}
-
-
-variable "ssh_user" {
-  type    = string
-  default = "ubuntu"
 }
 
 variable "ec2_keypair" {
-  description = "Name of pem  attached to all new ec2 instances created"
   type        = string
-}
-
-# Required
-variable "ssh_private_key_file" {
-  type        = string
-  description = "Location of pem private file using for all ssh connexion"
-}
-
-
-variable "docker_version" {
-  type        = string
-  description = "Docker version to install on nodes"
-  default     = "19.03"
-}
-
-variable "rancher_kubernetes_version" {
-  type        = string
-  description = "Kubernetes version to use for Rancher server cluster"
-  default     = "v1.21.4+k3s1"
-}
-
-variable "workload_kubernetes_version" {
-  type        = string
-  description = "Kubernetes version to use for managed workload cluster"
-  default     = "v1.20.12-rancher1-1"
-}
-
-variable "aws_zone" {
-  type        = string
-  description = "aws zone"
-  default     = "a"
-}
-
-
-variable "rancher_version" {
-  type        = string
-  description = "Rancher server version (format: v0.0.0)"
-  default     = "v2.6.0"
-}
-
-# Required
-variable "rancher_server_admin_password" {
-  type        = string
-  description = "Admin password to use for Rancher server bootstrap"
-}
-
-variable "workload_cluster_name" {
-  type        = string
-  description = "Cluster name to use for deployment of nodes"
-}
-
-# Local variables used to reduce repetition
-locals {
-  node_username = "ubuntu"
+  description = "Name of the AWS EC2 key pair to attach to the instance"
 }
 
 variable "admin_cidr" {
   type        = string
-  description = "Admin IP or CIDR"
+  description = "Admin IP or CIDR allowed to access SSH/HTTPS/K8s API (e.g. 1.2.3.4 or 1.2.3.4/32)"
+}
+
+variable "allow_http_01" {
+  type        = bool
+  description = "Allow inbound HTTP (80) for Let's Encrypt HTTP-01 challenge. Required if Rancher uses letsEncrypt tls.source."
+  default     = true
+}
+
+variable "http_01_cidr" {
+  type        = string
+  description = "CIDR allowed to reach port 80. Use 0.0.0.0/0 for Let's Encrypt."
+  default     = "0.0.0.0/0"
 }
 
 variable "k3s_version" {
-  type    = string
-  default = "v1.29.4+k3s1"
+  type        = string
+  description = "k3s version to install"
+  default     = "v1.29.4+k3s1"
 }
 
 locals {
   admin_cidr_norm = can(cidrnetmask(var.admin_cidr)) ? var.admin_cidr : "${var.admin_cidr}/32"
 }
-

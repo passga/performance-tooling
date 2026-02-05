@@ -1,22 +1,27 @@
+output "letsencrypt_environment" {
+  value = var.letsencrypt_environment
+}
 
 output "rancher_server_url" {
-  value = "https://${var.rancher_hostname}"
+  value       = local.rancher_api_url
+  description = "Rancher UI/API base URL."
 }
 
-# Required
-output "rancher_server_dns" {
-  value = var.rancher_hostname
+output "rancher_admin_password" {
+  description = "Initial Rancher admin password (sensitive)."
+  value       = random_password.rancher_admin.result
+  sensitive   = true
 }
 
-
-# Required
-output "rancher_server_token" {
-  value = rancher2_bootstrap.admin.token
-   sensitive = true
+output "rancher_bootstrap_token" {
+  description = "Rancher bootstrap token (sensitive)."
+  value       = rancher2_bootstrap.admin.token
+  sensitive   = true
 }
 
-# Required
 output "rancher_cli_token" {
-  value     = rancher2_token.tokenCLI.token
-  sensitive = true
+  description = "Rancher CLI API token (sensitive)."
+  value       = rancher2_token.tokenCLI.token
+  sensitive   = true
 }
+

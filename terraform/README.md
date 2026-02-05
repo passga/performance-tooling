@@ -1,47 +1,165 @@
-# Performance environment provisioning
+# Rancher on k3s on AWS (Terraform)
 
-Provision Rancher management server in your infrastructure provider of choice.
+This project provisions a **k3s** server on **AWS** and deploys **Rancher** with:
+- **Traefik** as Ingress Controller (k3s default)
+- **cert-manager** for TLS
+- **Let’s Encrypt** (**staging** or **production**)
+- Rancher served with a **trusted public certificate** (no `insecure` mode)
 
-**You will be responsible for any and all infrastructure costs incurred by these resources.**
-As a result, this repository minimizes costs by standing up the minimum required resources for a given provider.
-Use Vagrant to run Rancher locally and avoid cloud costs.
+---
 
-## Cloud perf-provisioning
+## Prerequisites
 
-perf-provisionings are provided for [**Amazon Web Services** (`aws`)](aws).
+### AWS
+- An **AWS account**
+- An IAM user or role with permissions to create EC2 / networking resources
+- AWS credentials exported as environment variables:
 
-**You will be responsible for any and all infrastructure costs incurred by these resources.**
+```bash
+export AWS_ACCESS_KEY_ID="xxxxxxxxxxxxxxxxxxxx"
+export AWS_SECRET_ACCESS_KEY="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+# optional
+export AWS_DEFAULT_REGION="eu-west-3"
+```
 
-Each perf-provisioning will install a Rancher on a single-node k3s cluster, then will provision another 2-node workload cluster using a Custom cluster in Rancher.
-This setup provides easy access to the core Rancher 
+---
 
-### Requirements - Cloud
+### Local tools
+- `terraform` (>= 1.4)
+- `kubectl`
+- `helm` (>= 3)
+- `curl`, `bash`
 
-- Terraform >=0.13.0
-- Credentials for the cloud provider used for the perf-env-provisioning
+---
 
-### Deploy
+## Project layout
 
-To begin with any perf-provisioning, perform the following steps:
+```
+terraform/
+├── aws/                      # AWS infra (EC2/VPC/etc.)
+├── kube/                     # generated kubeconfig (k3s.yaml)
+├── stacks/
+│   └── cert-manager/         # cert-manager + CRDs (separate state)
+└── rancher/
+    └── rancher-server/       # ClusterIssuer + Certificate + Rancher + bootstrap (separate state)
+tools/
+└── scripts/
+    └── fetch-kubeconfig.sh   # retrieves k3s kubeconfig from the server
+env/
+└── dev.tfvars                # example variables (optional)
+```
 
-1. Clone or download this repository to a local folder
-1. Choose a cloud provider and navigate into the provider's folder
-1. Copy or rename `terraform.tfvars.example` to `terraform.tfvars` and fill in all required variables
-1. Run `terraform init`
-1. Run `terraform apply`
+> cert-manager and Rancher are intentionally split into **separate Terraform states**
+> to avoid CRD ordering issues.
 
-When provisioning has finished, terraform will output the URL to connect to the Rancher server.
-Two sets of Kubernetes configurations will also be generated:
-- `kube_config_server.yaml` contains credentials to access the RKE cluster supporting the Rancher server
-- `kube_config_workload.yaml` contains credentials to access the provisioned workload cluster
+---
 
-For more details on each cloud provider, refer to the documentation in their respective folders.
+## 1) Provision AWS infrastructure (k3s server)
 
-### Remove
+```bash
+cd terraform/aws
+terraform init
+terraform apply -var-file=../../env/dev.tfvars
+```
 
-When you're finished exploring the Rancher server, use terraform to tear down all resources in the perf-provisioning.
+Terraform outputs include:
+- `public_ip`
+- `rancher_hostname`
 
-**NOTE: Any resources not provisioned by the perf-provisioning are not guaranteed to be destroyed when tearing down the perf-provisioning.**
-Make sure you tear down any resources you provisioned manually before running the destroy command.
+---
 
-Run `terraform destroy -auto-approve` to remove all resources without prompting for confirmation.
+## 2) Fetch kubeconfig from the k3s server
+
+```bash
+IP=$(terraform output -raw public_ip)
+HOST=$(terraform output -raw rancher_hostname)
+
+../../tools/scripts/fetch-kubeconfig.sh "$IP" ../../terraform/kube/k3s.yaml
+```
+
+Configure kubectl:
+
+```bash
+export KUBECONFIG=../../terraform/kube/k3s.yaml
+kubectl get ns
+```
+
+---
+
+## 3) Install cert-manager (CRDs)
+
+```bash
+cd ../stacks/cert-manager
+terraform init
+terraform apply -var-file=../../../env/dev.tfvars   -var="kubeconfig_path=../kube/k3s.yaml"
+```
+
+---
+
+## 4) Deploy Rancher
+
+```bash
+cd ../../rancher/rancher-server
+terraform init
+terraform apply -var-file=../../../env/dev.tfvars   -var="kubeconfig_path=../../kube/k3s.yaml"   -var="rancher_hostname=${HOST}"
+```
+
+Terraform outputs:
+- `rancher_server_url`
+- `rancher_admin_password` (sensitive)
+- Rancher API tokens (sensitive)
+
+---
+
+## TLS / Let’s Encrypt
+
+### Default: staging
+Staging is used by default to avoid rate limits while iterating.
+
+### Switch to production
+
+```bash
+terraform apply -var="letsencrypt_environment=production"
+```
+
+If switching from staging to production, force re-issuance:
+
+```bash
+kubectl -n cattle-system delete certificate rancher-tls
+kubectl -n cattle-system delete secret rancher-tls
+terraform apply -var="letsencrypt_environment=production"
+```
+
+---
+
+## Access Rancher
+
+Open:
+
+```
+https://<rancher_hostname>
+```
+
+Admin password:
+
+```bash
+terraform output -raw rancher_admin_password
+```
+
+---
+
+## Re-deploy Rancher
+
+```bash
+terraform apply -replace=helm_release.rancher_server
+```
+
+---
+
+## Cleanup
+
+Run `terraform destroy` in each Terraform state directory (AWS / cert-manager / rancher-server):
+
+```bash
+terraform destroy
+```
