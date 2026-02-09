@@ -1,165 +1,134 @@
-# Rancher on k3s on AWS (Terraform)
+# Rancher on k3s – Terraform Proof of Concept (AWS)
 
-This project provisions a **k3s** server on **AWS** and deploys **Rancher** with:
-- **Traefik** as Ingress Controller (k3s default)
-- **cert-manager** for TLS
-- **Let’s Encrypt** (**staging** or **production**)
-- Rancher served with a **trusted public certificate** (no `insecure` mode)
+This repository contains a **clean, reproducible Proof of Concept** to deploy **Rancher on top of k3s**, running on **AWS EC2**, fully automated with **Terraform**.
 
----
-
-## Prerequisites
-
-### AWS
-- An **AWS account**
-- An IAM user or role with permissions to create EC2 / networking resources
-- AWS credentials exported as environment variables:
-
-```bash
-export AWS_ACCESS_KEY_ID="xxxxxxxxxxxxxxxxxxxx"
-export AWS_SECRET_ACCESS_KEY="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-# optional
-export AWS_DEFAULT_REGION="eu-west-3"
-```
+The goal of this POC is **not** to hide complexity, but to demonstrate:
+- correct infrastructure layering
+- clean Terraform modularization
+- proper handling of TLS, CRDs, and bootstrapping constraints
+- production-grade reasoning applied to a small setup
 
 ---
 
-### Local tools
-- `terraform` (>= 1.4)
-- `kubectl`
-- `helm` (>= 3)
-- `curl`, `bash`
+## 🎯 Objectives
+
+- Deploy **k3s** on a single EC2 instance using `cloud-init`
+- Install **cert-manager** and **Rancher** using Terraform (Helm + Kubernetes providers)
+- Use **valid TLS** (no `insecure_skip_tls_verify`)
+- Ensure **reproducibility** (stable IP, deterministic flow)
+- Clearly separate **infrastructure** and **Kubernetes addons**
 
 ---
 
-## Project layout
+## 🧱 Architecture Overview
 
-```
+AWS  
+└── EC2 (k3s server)  
+    ├── k3s (single-node cluster)  
+    ├── Traefik (default ingress)  
+    ├── cert-manager  
+    │   └── CRDs + ClusterIssuer (Let's Encrypt)  
+    └── Rancher  
+        └── HTTPS via nip.io + cert-manager  
+
+Key points:
+- Elastic IP ensures a stable public endpoint
+- nip.io provides DNS without external dependencies
+- tls-san is configured in k3s to avoid x509 errors
+- No insecure flags are used for Kubernetes or Rancher
+
+---
+
+## 📁 Repository Structure
+
 terraform/
-├── aws/                      # AWS infra (EC2/VPC/etc.)
-├── kube/                     # generated kubeconfig (k3s.yaml)
-├── stacks/
-│   └── cert-manager/         # cert-manager + CRDs (separate state)
-└── rancher/
-    └── rancher-server/       # ClusterIssuer + Certificate + Rancher + bootstrap (separate state)
-tools/
-└── scripts/
-    └── fetch-kubeconfig.sh   # retrieves k3s kubeconfig from the server
-env/
-└── dev.tfvars                # example variables (optional)
-```
-
-> cert-manager and Rancher are intentionally split into **separate Terraform states**
-> to avoid CRD ordering issues.
+├── aws-root/               # Infrastructure root (AWS + k3s)  
+├── addons-root/            # Kubernetes addons root (cert-manager + Rancher)  
+├── modules/                # Reusable Terraform modules  
+├── kube/                   # Generated kubeconfig (gitignored)  
+└── scripts/                # Helper scripts  
 
 ---
 
-## 1) Provision AWS infrastructure (k3s server)
+## 🚀 Deployment Flow
+
+### Phase 1 – Infrastructure + k3s
 
 ```bash
-cd terraform/aws
-terraform init
-terraform apply -var-file=../../env/dev.tfvars
+terraform -chdir=terraform/aws-root apply
 ```
 
-Terraform outputs include:
-- `public_ip`
-- `rancher_hostname`
+This step:
+- creates AWS networking
+- provisions the EC2 instance
+- installs k3s via cloud-init
+- attaches an Elastic IP
 
 ---
 
-## 2) Fetch kubeconfig from the k3s server
+### Phase 2 – Fetch kubeconfig
 
 ```bash
-IP=$(terraform output -raw public_ip)
-HOST=$(terraform output -raw rancher_hostname)
-
-../../tools/scripts/fetch-kubeconfig.sh "$IP" ../../terraform/kube/k3s.yaml
+./scripts/fetch-kubeconfig.sh
 ```
 
-Configure kubectl:
-
-```bash
-export KUBECONFIG=../../terraform/kube/k3s.yaml
-kubectl get ns
-```
+This script:
+- fetches `/etc/rancher/k3s/k3s.yaml`
+- rewrites the API endpoint to the public IP
+- stores it under `terraform/kube/k3s.yaml`
 
 ---
 
-## 3) Install cert-manager (CRDs)
+### Phase 3 – Kubernetes Addons
 
 ```bash
-cd ../stacks/cert-manager
-terraform init
-terraform apply -var-file=../../../env/dev.tfvars   -var="kubeconfig_path=../kube/k3s.yaml"
+terraform -chdir=terraform/addons-root apply
 ```
+
+This installs:
+- cert-manager (with CRDs)
+- Rancher (via Helm)
+- Rancher bootstrap (admin password, token)
 
 ---
 
-## 4) Deploy Rancher
+## 🔐 TLS Strategy
 
-```bash
-cd ../../rancher/rancher-server
-terraform init
-terraform apply -var-file=../../../env/dev.tfvars   -var="kubeconfig_path=../../kube/k3s.yaml"   -var="rancher_hostname=${HOST}"
-```
-
-Terraform outputs:
-- `rancher_server_url`
-- `rancher_admin_password` (sensitive)
-- Rancher API tokens (sensitive)
+- cert-manager is installed with CRDs enabled
+- a `ClusterIssuer` (Let's Encrypt) is created
+- Rancher ingress uses a valid TLS certificate
+- No `insecure_skip_tls_verify` flags are used
 
 ---
 
-## TLS / Let’s Encrypt
+## ⚠️ Known Terraform Constraints (Handled Explicitly)
 
-### Default: staging
-Staging is used by default to avoid rate limits while iterating.
+Terraform cannot model:
+- file generation outside the graph (kubeconfig)
+- CRD availability timing
+- API readiness
 
-### Switch to production
+Solutions used:
+- two Terraform roots
+- explicit wait barriers (`null_resource`)
+- documented execution order
 
-```bash
-terraform apply -var="letsencrypt_environment=production"
-```
-
-If switching from staging to production, force re-issuance:
-
-```bash
-kubectl -n cattle-system delete certificate rancher-tls
-kubectl -n cattle-system delete secret rancher-tls
-terraform apply -var="letsencrypt_environment=production"
-```
+These are intentional and documented decisions.
 
 ---
 
-## Access Rancher
+## 🧠 Interview Notes
 
-Open:
-
-```
-https://<rancher_hostname>
-```
-
-Admin password:
-
-```bash
-terraform output -raw rancher_admin_password
-```
+This POC demonstrates:
+- understanding of Terraform dependency graph limits
+- clean separation between infra and cluster addons
+- real-world Kubernetes TLS bootstrapping
+- pragmatic DevOps decision-making
 
 ---
 
-## Re-deploy Rancher
+## ✅ Status
 
-```bash
-terraform apply -replace=helm_release.rancher_server
-```
-
----
-
-## Cleanup
-
-Run `terraform destroy` in each Terraform state directory (AWS / cert-manager / rancher-server):
-
-```bash
-terraform destroy
-```
+- Rancher UI reachable over HTTPS
+- cert-manager operational
+- Fully reproducible POC
