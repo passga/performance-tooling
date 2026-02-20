@@ -1,7 +1,17 @@
 # AWS
 .aws/
+# Local secrets / env
+env/*.tfvars
+env/*.tfvars.json
 
-kube/*.yaml
+# Local kubeconfig
+terraform/kube/*.yaml
+terraform/kube/*.yml
+**/k3s.yaml
+**/kube/*.yaml
+**/kube/*.yml
+
+
 # Terraform
 .terraform/
 *.tfstate
