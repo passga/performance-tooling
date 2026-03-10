@@ -1,33 +1,30 @@
 # performance-tooling
 
-`performance-tooling` is a personal **Platform Engineering / DevOps playground** used to experiment with:
+`performance-tooling` is a **Terraform-based playground to experiment with building a Kubernetes platform on AWS using Rancher.**
 
-- Terraform
-- Kubernetes
-- Rancher
-- Cloud infrastructure on AWS
+It is used to explore **Platform Engineering concepts** such as infrastructure automation, Kubernetes cluster lifecycle management and multi-cluster operations.
 
 The goal of this repository is to progressively build a **small but realistic Kubernetes platform stack**.
 
 ---
 
-# Why this repository exists
+## Why this repository exists
 
 This project is used to experiment with platform engineering concepts such as:
 
-- infrastructure automation with Terraform
+- infrastructure automation with **Terraform**
 - Kubernetes cluster lifecycle management
-- multi-cluster management with Rancher
-- platform services such as Vault
+- multi-cluster management with **Rancher**
+- platform services such as **Vault**
 - reproducible infrastructure environments
 
 It serves as a **learning platform and technical sandbox**.
 
 ---
 
-# Architecture
+## Architecture
 
-## Current architecture
+### Current architecture
 
 ```
 AWS
@@ -44,7 +41,7 @@ This cluster hosts only **platform control components**.
 
 ---
 
-## Target architecture
+### Target architecture
 
 ```
 AWS
@@ -61,7 +58,7 @@ Workloads and platform services will run on those clusters.
 
 ---
 
-# Repository Structure
+## Repository Structure
 
 ```
 performance-tooling
@@ -103,7 +100,7 @@ Terraform is intentionally split into **multiple roots** to handle bootstrap con
 
 ---
 
-# Current Stack
+## Current Stack
 
 The repository currently provisions:
 
@@ -118,9 +115,9 @@ This environment acts as the **platform management cluster**.
 
 ---
 
-# Quick Start
+## Quick Start
 
-## 1. Provision infrastructure
+### 1. Provision infrastructure
 
 ```
 cd terraform/aws-root
@@ -128,49 +125,52 @@ terraform init
 terraform apply
 ```
 
-## 2. Retrieve kubeconfig
+### 2. Retrieve kubeconfig
 
 ```
 ./tools/scripts/fetch-kubeconfig.sh
 ```
 
-## 3. Install cert-manager
+### 3. Install cert-manager
 
 ```
 cd terraform/platform/platform-cert-manager-root
+terraform init
 terraform apply
 ```
 
-## 4. Create ClusterIssuer
+### 4. Create ClusterIssuer
 
 ```
 cd terraform/platform/platform-issuer-root
+terraform init
 terraform apply
 ```
 
-## 5. Install Rancher
+### 5. Install Rancher
 
 ```
 cd terraform/addons-root
+terraform init
 terraform apply
 ```
 
-Once deployed, Rancher UI becomes available.
+Once deployed, the Rancher UI becomes available.
 
 ---
 
-# Roadmap
+## Roadmap
 
 Next improvements planned:
 
 - Provision **downstream RKE2 clusters via Rancher**
 - Deploy **Hashicorp Vault**
-- Demonstrate **secret injection into Kubernetes workloads**
+- Demonstrate **Vault secret injection into Kubernetes workloads**
 - Add **demo applications**
 - Add **observability stack (Prometheus / Grafana)**
 
 ---
 
-# Disclaimer
+## Disclaimer
 
 This repository is a **learning and experimentation project** and is **not production-ready infrastructure**.
