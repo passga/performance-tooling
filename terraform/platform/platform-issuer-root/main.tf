@@ -3,6 +3,8 @@ resource "null_resource" "wait_cert_manager_ready" {
   # (si tu as un module cert-manager, tu peux mettre depends_on dessus)
 
   provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
+
     command = <<EOT
 set -euo pipefail
 
