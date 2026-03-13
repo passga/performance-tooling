@@ -25,6 +25,8 @@ variable "instance_type" {
 variable "access_key" {
   type      = string
   sensitive = true
+  default   = null
+  nullable  = true
 }
 
 variable "secret_key" {
@@ -56,4 +58,9 @@ variable "windows_prefered_cluster" {
 variable "prefix" {
   type    = string
   default = ""
+
+  validation {
+    condition     = length(trimspace(var.prefix)) > 0
+    error_message = "prefix cannot be empty"
+  }
 }

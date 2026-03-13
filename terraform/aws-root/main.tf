@@ -1,6 +1,10 @@
 module "network" {
-  source = "../modules/aws-network"
+  source            = "../modules/aws-network"
   admin_cidr        = var.admin_cidr
+  availability_zone = var.availability_zone
+  prefix            = var.prefix
+  allow_http_01     = var.allow_http_01
+  http_01_cidr      = var.http_01_cidr
 }
 
 module "k3s_node" {
@@ -40,4 +44,3 @@ chmod 600 ${local.kubeconfig_path}
 EOT
   }
 }
-
