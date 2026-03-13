@@ -10,3 +10,7 @@ output "aws_subnet_id" {
 output "aws_sg_id" {
   value = aws_security_group.main.id
 }
+
+output "aws_sg_name" {
+  value = aws_security_group.main.name
+}

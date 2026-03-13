@@ -11,3 +11,7 @@ output "rancher_admin_password" {
   sensitive   = true
 }
 
+output "rancher_server_token" {
+  value     = rancher2_bootstrap.bootstrap.token
+  sensitive = true
+}
