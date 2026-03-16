@@ -61,47 +61,47 @@ resource "null_resource" "wait_for_cluster_readiness" {
   depends_on = [rancher2_cluster_v2.cluster]
 
   triggers = {
-    cluster_id        = rancher2_cluster_v2.cluster.id
-    rancher_api_url   = var.rancher_api_url
-    insecure          = tostring(var.rancher_insecure)
-    timeout_duration  = var.cluster_ready_wait_duration
+    cluster_id = rancher2_cluster_v2.cluster.id
   }
 
   provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
+
     environment = {
-      RANCHER_API_URL = var.rancher_api_url
-      RANCHER_TOKEN   = var.rancher_api_token
-      CLUSTER_ID      = rancher2_cluster_v2.cluster.id
-      TIMEOUT_SECONDS = trimsuffix(var.cluster_ready_wait_duration, "s")
-      CURL_INSECURE   = var.rancher_insecure ? "true" : "false"
+      RANCHER_URL   = var.rancher_api_url
+      RANCHER_TOKEN = var.rancher_api_token
+      CLUSTER_ID    = rancher2_cluster_v2.cluster.id
+      CURL_INSECURE = var.rancher_insecure ? "true" : "false"
     }
 
-    interpreter = ["/bin/bash", "-c"]
-    command     = <<-EOT
+    command = <<EOT
 set -euo pipefail
+
+echo "Waiting for Rancher provisioning cluster to become ready..."
 
 curl_args=()
 if [ "$${CURL_INSECURE}" = "true" ]; then
   curl_args+=("-k")
 fi
 
-for ((i=1; i<=$${TIMEOUT_SECONDS}; i+=10)); do
-  response="$$(curl -fsS "$${curl_args[@]}" \
+for i in $(seq 1 60); do
+  response=$(curl -fsS "$${curl_args[@]}" \
     -H "Authorization: Bearer $${RANCHER_TOKEN}" \
-    "$${RANCHER_API_URL}/v3/clusters/$${CLUSTER_ID}")"
+    "$${RANCHER_URL}/v1/provisioning.cattle.io.clusters/$${CLUSTER_ID}")
 
-  state="$$(printf '%s' "$${response}" | grep -o '"state":"[^"]*"' | head -n1 | cut -d'"' -f4)"
+  ready=$(printf '%s' "$${response}" | python3 -c 'import sys, json; data=json.load(sys.stdin); conds=data.get("status", {}).get("conditions", []); print(next((c.get("status","False") for c in conds if c.get("type")=="Ready"), "False"))')
 
-  if [ "$${state}" = "active" ]; then
-    echo "Cluster $${CLUSTER_ID} is active"
+  echo "Cluster Ready condition: $${ready}"
+
+  if [ "$${ready}" = "True" ]; then
+    echo "Cluster is ready"
     exit 0
   fi
 
-  echo "Waiting for cluster $${CLUSTER_ID} to become active, current state: $${state:-unknown}"
   sleep 10
 done
 
-echo "Cluster $${CLUSTER_ID} did not become active within $${TIMEOUT_SECONDS}s"
+echo "Cluster did not become ready in time"
 exit 1
 EOT
   }
@@ -129,7 +129,7 @@ resource "rancher2_machine_config_v2" "cluster_template_ec2" {
 resource "rancher2_project" "init_project" {
   depends_on  = [null_resource.wait_for_cluster_readiness]
   name        = var.prefix
-  cluster_id  = rancher2_cluster_v2.cluster.id
+  cluster_id  = rancher2_cluster_v2.cluster.cluster_v1_id
   description = "${var.prefix} project for running of performance tests"
 }
 
