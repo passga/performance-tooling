@@ -134,6 +134,6 @@ resource "null_resource" "cleanup_rancher_destroy" {
       RANCHER_NAMESPACE = self.triggers.namespace
     }
 
-    command = "/bin/bash ${path.root}/../../tools/scripts/cleanup-rancher-destroy.sh"
+    command = "/bin/bash ${path.root}/../../../tools/scripts/cleanup-rancher-destroy.sh"
   }
 }
