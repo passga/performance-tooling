@@ -18,3 +18,5 @@ id_rsa*
 .env
 .idea/
 *.iml
+kubectl
+bin/
