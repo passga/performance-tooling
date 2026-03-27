@@ -6,6 +6,10 @@ data "terraform_remote_state" "downstream_rke2" {
   }
 }
 
+data "aws_iam_instance_profile" "downstream_nodes" {
+  name = var.downstream_node_instance_profile_name
+}
+
 data "kubernetes_service_v1" "rke2_traefik" {
   metadata {
     name      = "rke2-traefik"

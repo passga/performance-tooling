@@ -91,13 +91,14 @@ resource "rancher2_machine_config_v2" "cluster_template_ec2" {
   generate_name = "${var.workload_cluster_name}-"
 
   amazonec2_config {
-    ami            = data.aws_ami.ubuntu.id
-    instance_type  = var.instance_type
-    region         = var.aws_region
-    subnet_id      = var.aws_subnet_id
-    root_size      = 16
-    security_group = [var.ec2_security_group_name]
-    vpc_id         = var.aws_vpc_id
-    zone           = local.aws_zone_suffix
+    ami                  = data.aws_ami.ubuntu.id
+    instance_type        = var.instance_type
+    region               = var.aws_region
+    subnet_id            = var.aws_subnet_id
+    root_size            = 16
+    security_group       = [var.ec2_security_group_name]
+    vpc_id               = var.aws_vpc_id
+    zone                 = local.aws_zone_suffix
+    iam_instance_profile = var.downstream_node_instance_profile_name
   }
 }

@@ -9,6 +9,7 @@ control_plane_quantity      = 1
 worker_quantity             = 1
 cluster_ready_wait_duration = "90s"
 windows_prefered_cluster    = false
+downstream_node_instance_profile_name = "demo-downstream-nodes"
 
 # Rancher server access
 rancher_insecure = false

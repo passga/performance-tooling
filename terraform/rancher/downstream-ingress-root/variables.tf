@@ -1,6 +1,6 @@
-variable "downstream_node_iam_role_name" {
+variable "downstream_node_instance_profile_name" {
   type        = string
-  description = "Existing IAM role name attached to downstream RKE2 EC2 nodes. AWS Load Balancer Controller permissions are attached to this role."
+  description = "Existing IAM instance profile name attached to downstream RKE2 EC2 nodes."
 }
 
 variable "aws_load_balancer_controller_chart_version" {

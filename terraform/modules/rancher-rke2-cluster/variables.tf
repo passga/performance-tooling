@@ -117,6 +117,11 @@ variable "rancher_insecure" {
   default     = false
 }
 
+variable "downstream_node_instance_profile_name" {
+  type        = string
+  description = "AWS IAM Instance Profile name attached to downstream RKE2 EC2 nodes."
+}
+
 locals {
   using_existing_cloud_credential = var.cloud_credential_id != null && trimspace(var.cloud_credential_id) != ""
   using_supplied_aws_keys         = var.access_key != null && trimspace(var.access_key) != "" && var.secret_key != null && trimspace(var.secret_key) != ""
