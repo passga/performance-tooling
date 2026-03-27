@@ -1,4 +1,3 @@
-
 module "downstream_rke2" {
   source                                = "../../modules/rancher-rke2-cluster"
   access_key                            = var.access_key

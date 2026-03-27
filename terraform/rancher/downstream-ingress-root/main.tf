@@ -4,7 +4,7 @@ resource "aws_iam_policy" "aws_load_balancer_controller" {
 }
 
 resource "aws_iam_role_policy_attachment" "aws_load_balancer_controller" {
-  role       = data.terraform_remote_state.downstream_rke2.outputs.downstream_node_iam_role_name
+  role       = data.aws_iam_instance_profile.downstream_nodes.role_name
   policy_arn = aws_iam_policy.aws_load_balancer_controller.arn
 }
 

@@ -76,7 +76,7 @@ variable "cluster_ready_wait_duration" {
 
 variable "downstream_node_instance_profile_name" {
   type        = string
-  description = "AWS IAM Instance Profile name attached to downstream RKE2 EC2 nodes."
+  description = "Existing AWS IAM Instance Profile name attached to downstream RKE2 EC2 nodes."
 }
 
 variable "rancher_insecure" {
