@@ -5,6 +5,14 @@ locals {
   cluster_name_has_prefix  = local.normalized_prefix != "" && (var.workload_cluster_name == local.normalized_prefix || startswith(var.workload_cluster_name, "${local.normalized_prefix}-") || endswith(var.workload_cluster_name, "-${local.normalized_prefix}") || strcontains(var.workload_cluster_name, "-${local.normalized_prefix}-"))
   kubeconfig_filename_base = local.cluster_name_has_prefix || local.normalized_prefix == "" ? var.workload_cluster_name : "${local.normalized_prefix}-${var.workload_cluster_name}"
   kubeconfig_filename      = "${local.kubeconfig_filename_base}-kubeconfig.yaml"
+  downstream_ec2_tags = {
+    "tf-aws-platform-cluster"   = var.workload_cluster_name
+    "tf-aws-platform-component" = "downstream-rke2"
+    "tf-aws-platform-managed"   = "true"
+  }
+  downstream_ec2_tags_csv = join(",", flatten([
+    for key in sort(keys(local.downstream_ec2_tags)) : [key, local.downstream_ec2_tags[key]]
+  ]))
 }
 
 # Save kubeconfig locally without storing the content in plaintext state.
@@ -33,4 +41,3 @@ locals {
   rke_network_plugin = var.windows_prefered_cluster ? "flannel" : "canal"
   aws_zone_suffix    = trimprefix(var.aws_zone, var.aws_region)
 }
-

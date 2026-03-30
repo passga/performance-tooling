@@ -1,18 +1,4 @@
-resource "aws_iam_policy" "aws_load_balancer_controller" {
-  name   = "${data.terraform_remote_state.downstream_rke2.outputs.cluster_name}-aws-load-balancer-controller"
-  policy = file("${path.module}/files/aws-load-balancer-controller-iam-policy.json")
-}
-
-resource "aws_iam_role_policy_attachment" "aws_load_balancer_controller" {
-  role       = data.aws_iam_instance_profile.downstream_nodes.role_name
-  policy_arn = aws_iam_policy.aws_load_balancer_controller.arn
-}
-
 resource "helm_release" "aws_load_balancer_controller" {
-  depends_on = [
-    aws_iam_role_policy_attachment.aws_load_balancer_controller,
-  ]
-
   repository       = "https://aws.github.io/eks-charts"
   chart            = "aws-load-balancer-controller"
   name             = "aws-load-balancer-controller"
@@ -44,61 +30,29 @@ resource "helm_release" "aws_load_balancer_controller" {
   ]
 }
 
-resource "kubernetes_manifest" "rke2_traefik_service_nlb" {
+resource "kubernetes_manifest" "rke2_traefik_config" {
   depends_on = [helm_release.aws_load_balancer_controller]
 
-  field_manager {
-    force_conflicts = true
-  }
-
-  computed_fields = [
-    "metadata.creationTimestamp",
-    "metadata.labels",
-    "metadata.resourceVersion",
-    "metadata.uid",
-    "spec.clusterIP",
-    "spec.clusterIPs",
-    "spec.healthCheckNodePort",
-    "status",
-  ]
-
   manifest = {
-    apiVersion = "v1"
-    kind       = "Service"
+    apiVersion = "helm.cattle.io/v1"
+    kind       = "HelmChartConfig"
 
     metadata = {
-      name      = data.kubernetes_service_v1.rke2_traefik.metadata[0].name
-      namespace = data.kubernetes_service_v1.rke2_traefik.metadata[0].namespace
-      annotations = merge(
-        try(data.kubernetes_service_v1.rke2_traefik.metadata[0].annotations, {}),
-        {
-          "service.beta.kubernetes.io/aws-load-balancer-nlb-target-type" = "instance"
-          "service.beta.kubernetes.io/aws-load-balancer-scheme"          = "internet-facing"
-          "service.beta.kubernetes.io/aws-load-balancer-subnets"         = data.terraform_remote_state.downstream_rke2.outputs.aws_subnet_id
-        }
-      )
+      name      = "rke2-traefik"
+      namespace = "kube-system"
     }
 
     spec = {
-      externalTrafficPolicy = try(data.kubernetes_service_v1.rke2_traefik.spec[0].external_traffic_policy, null)
-      internalTrafficPolicy = try(data.kubernetes_service_v1.rke2_traefik.spec[0].internal_traffic_policy, null)
-      ipFamilies            = try(data.kubernetes_service_v1.rke2_traefik.spec[0].ip_families, null)
-      ipFamilyPolicy        = try(data.kubernetes_service_v1.rke2_traefik.spec[0].ip_family_policy, null)
-      loadBalancerClass     = "service.k8s.aws/nlb"
-      selector              = data.kubernetes_service_v1.rke2_traefik.spec[0].selector
-      sessionAffinity       = data.kubernetes_service_v1.rke2_traefik.spec[0].session_affinity
-      type                  = "LoadBalancer"
-
-      ports = [
-        for port in data.kubernetes_service_v1.rke2_traefik.spec[0].port : {
-          appProtocol = try(port.app_protocol, null)
-          name        = try(port.name, null)
-          nodePort    = try(port.node_port, null)
-          port        = port.port
-          protocol    = try(port.protocol, null)
-          targetPort  = try(port.target_port, null)
-        }
-      ]
+      valuesContent = <<-EOT
+        service:
+          type: LoadBalancer
+          annotations:
+            service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: instance
+            service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+            service.beta.kubernetes.io/aws-load-balancer-subnets: ${data.terraform_remote_state.downstream_rke2.outputs.aws_subnet_id}
+          spec:
+            loadBalancerClass: service.k8s.aws/nlb
+      EOT
     }
   }
 }

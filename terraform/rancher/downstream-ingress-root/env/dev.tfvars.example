@@ -1,2 +1,1 @@
 aws_region = "eu-west-3"
-downstream_node_instance_profile_name = "demo-downstream-nodes"

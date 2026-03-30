@@ -14,3 +14,7 @@ data "terraform_remote_state" "rancher_server" {
     path = "../rancher-server-root/terraform.tfstate"
   }
 }
+
+data "aws_iam_instance_profile" "downstream_nodes" {
+  name = var.downstream_node_instance_profile_name
+}

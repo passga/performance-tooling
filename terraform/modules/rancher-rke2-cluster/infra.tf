@@ -59,10 +59,10 @@ resource "rancher2_cluster_v2" "cluster" {
   kubernetes_version = var.workload_kubernetes_version
 }
 
-resource "null_resource" "wait_for_cluster_readiness" {
+resource "terraform_data" "wait_for_cluster_readiness" {
   depends_on = [rancher2_cluster_v2.cluster]
 
-  triggers = {
+  triggers_replace = {
     provisioning_cluster_id = rancher2_cluster_v2.cluster.id
     management_cluster_id   = rancher2_cluster_v2.cluster.cluster_v1_id
     rancher_api_url         = var.rancher_api_url
@@ -82,7 +82,45 @@ resource "null_resource" "wait_for_cluster_readiness" {
       TIMEOUT_DURATION        = var.cluster_ready_wait_duration
     }
 
-    command = "/bin/bash ${path.root}/../../../tools/scripts/wait-for-rancher-cluster.sh"
+    command = "/bin/bash ${path.module}/../../../tools/scripts/wait-for-rancher-cluster.sh"
+  }
+}
+
+resource "terraform_data" "fix_cluster_ec2_imds" {
+  count      = var.enable_cluster_scoped_imds_fix ? 1 : 0
+  depends_on = [terraform_data.wait_for_cluster_readiness]
+
+  triggers_replace = {
+    aws_region         = var.aws_region
+    instance_ids       = join(",", sort(data.aws_instances.downstream_nodes.ids))
+    http_endpoint      = "enabled"
+    http_tokens        = "required"
+    hop_limit          = "2"
+    cluster_tag_key    = "tf-aws-platform-cluster"
+    cluster_tag_value  = var.workload_cluster_name
+    component_tag_key  = "tf-aws-platform-component"
+    component_tag_value = "downstream-rke2"
+    managed_tag_key    = "tf-aws-platform-managed"
+    managed_tag_value  = "true"
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
+
+    environment = {
+      AWS_REGION                  = var.aws_region
+      CLUSTER_TAG_KEY             = "tf-aws-platform-cluster"
+      CLUSTER_TAG_VALUE           = var.workload_cluster_name
+      COMPONENT_TAG_KEY           = "tf-aws-platform-component"
+      COMPONENT_TAG_VALUE         = "downstream-rke2"
+      MANAGED_TAG_KEY             = "tf-aws-platform-managed"
+      MANAGED_TAG_VALUE           = "true"
+      HTTP_ENDPOINT               = "enabled"
+      HTTP_TOKENS                 = "required"
+      HTTP_PUT_RESPONSE_HOP_LIMIT = "2"
+    }
+
+    command = "/bin/bash ${path.module}/../../../tools/scripts/fix-downstream-ec2-imds.sh"
   }
 }
 
@@ -92,11 +130,14 @@ resource "rancher2_machine_config_v2" "cluster_template_ec2" {
 
   amazonec2_config {
     ami                  = data.aws_ami.ubuntu.id
+    http_endpoint        = "enabled"
+    http_tokens          = "required"
     instance_type        = var.instance_type
     region               = var.aws_region
     subnet_id            = var.aws_subnet_id
     root_size            = 16
     security_group       = [var.ec2_security_group_name]
+    tags                 = local.downstream_ec2_tags_csv
     vpc_id               = var.aws_vpc_id
     zone                 = local.aws_zone_suffix
     iam_instance_profile = var.downstream_node_instance_profile_name
