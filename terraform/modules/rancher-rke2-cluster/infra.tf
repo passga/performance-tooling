@@ -92,7 +92,7 @@ resource "terraform_data" "fix_cluster_ec2_imds" {
 
   triggers_replace = {
     aws_region         = var.aws_region
-    instance_ids       = join(",", sort(data.aws_instances.downstream_nodes.ids))
+    instance_ids       = var.enable_cluster_scoped_imds_fix ? join(",", sort(data.aws_instances.downstream_nodes[0].ids)) : ""
     http_endpoint      = "enabled"
     http_tokens        = "required"
     hop_limit          = "2"

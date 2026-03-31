@@ -24,6 +24,7 @@ data "aws_ami" "ubuntu" {
 }
 
 data "aws_instances" "downstream_nodes" {
+  count      = var.enable_cluster_scoped_imds_fix ? 1 : 0
   depends_on = [terraform_data.wait_for_cluster_readiness]
 
   filter {
