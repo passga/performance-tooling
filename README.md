@@ -55,7 +55,7 @@ The validated implementation covers:
 +-----------------------------------------------------------------------------------+
 |                              AWS Network Load Balancer                            |
 |-----------------------------------------------------------------------------------|
-| NLB created from the Traefik LoadBalancer Service                                 |
+| NLB created from the Traefik Service type LoadBalancer                            |
 | Traffic forwarded to Traefik                                                      |
 +-----------------------------------------+-----------------------------------------+
                                           |
@@ -64,6 +64,7 @@ The validated implementation covers:
 |                                  Ingress traffic                                  |
 |-----------------------------------------------------------------------------------|
 | Argo CD exposed through Traefik ingress                                           |
+| Validated through the AWS NLB with the expected Host header before DNS wiring     |
 +-----------------------------------------------------------------------------------+
 ```
 
@@ -77,7 +78,7 @@ With the current validated code path, this repository demonstrates:
 - external AWS cloud-provider integration through `aws-cloud-controller-manager`
 - Traefik exposed by a Kubernetes `LoadBalancer` Service and reconciled to an AWS NLB
 - downstream application exposure through Traefik ingress
-- Argo CD deployed in the downstream cluster
+- Argo CD deployed in the downstream cluster and validated through the AWS NLB with the expected Host header before DNS wiring
 - Rancher project and namespace resources created after cluster readiness
 
 ## Screenshot
