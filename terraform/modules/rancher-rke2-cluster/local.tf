@@ -41,3 +41,9 @@ locals {
   rke_network_plugin = var.windows_prefered_cluster ? "flannel" : "canal"
   aws_zone_suffix    = trimprefix(var.aws_zone, var.aws_region)
 }
+
+locals {
+  cloud_credential_id = (
+  var.cloud_credential_id != null && trimspace(var.cloud_credential_id) != ""
+  ) ? trimspace(var.cloud_credential_id) : rancher2_cloud_credential.node[0].id
+}

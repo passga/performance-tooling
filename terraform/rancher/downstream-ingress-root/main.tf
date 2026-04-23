@@ -47,11 +47,9 @@ resource "kubernetes_manifest" "rke2_traefik_config" {
         service:
           type: LoadBalancer
           annotations:
-            service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: instance
             service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+            service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: instance
             service.beta.kubernetes.io/aws-load-balancer-subnets: ${data.terraform_remote_state.downstream_rke2.outputs.aws_subnet_id}
-          spec:
-            loadBalancerClass: service.k8s.aws/nlb
       EOT
     }
   }

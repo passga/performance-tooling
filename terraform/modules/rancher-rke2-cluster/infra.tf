@@ -17,9 +17,174 @@ resource "rancher2_cluster_v2" "cluster" {
   rke_config {
     machine_global_config = yamlencode({
       cni                 = local.rke_network_plugin
+      cloud-provider-name = "aws"
       disable             = ["rke2-ingress-nginx"]
       ingress-controller  = "traefik"
     })
+
+    # ETCD
+    machine_selector_config {
+      config = yamlencode({
+        kubelet-arg = [
+          "cloud-provider=external",
+        ]
+      })
+
+      machine_label_selector {
+        match_labels = {
+          "rke.cattle.io/etcd-role" = "true"
+        }
+      }
+    }
+
+    # Control-plane
+    machine_selector_config {
+      config = yamlencode({
+        disable-cloud-controller = true
+        kube-controller-manager-arg = [
+          "cloud-provider=external",
+        ]
+        kubelet-arg = [
+          "cloud-provider=external",
+        ]
+      })
+
+      machine_label_selector {
+        match_labels = {
+          "rke.cattle.io/control-plane-role" = "true"
+        }
+      }
+    }
+
+    # Worker
+    machine_selector_config {
+      config = yamlencode({
+        kubelet-arg = [
+          "cloud-provider=external",
+        ]
+      })
+
+      machine_label_selector {
+        match_labels = {
+          "rke.cattle.io/worker-role" = "true"
+        }
+      }
+    }
+
+    additional_manifest = <<-EOT
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: aws-cloud-controller-manager
+  namespace: kube-system
+spec:
+  chart: aws-cloud-controller-manager
+  repo: https://kubernetes.github.io/cloud-provider-aws
+  targetNamespace: kube-system
+  bootstrap: true
+  valuesContent: |-
+    hostNetworking: true
+    tolerations:
+      - key: node.cloudprovider.kubernetes.io/uninitialized
+        operator: Equal
+        value: "true"
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/etcd
+        operator: Exists
+        effect: NoExecute
+    nodeSelector:
+      node-role.kubernetes.io/control-plane: "true"
+    args:
+      - --configure-cloud-routes=false
+      - --use-service-account-credentials=true
+      - --v=2
+      - --cloud-provider=aws
+    clusterRoleRules:
+      - apiGroups:
+          - ""
+        resources:
+          - events
+        verbs:
+          - create
+          - patch
+          - update
+      - apiGroups:
+          - ""
+        resources:
+          - nodes
+        verbs:
+          - "*"
+      - apiGroups:
+          - ""
+        resources:
+          - nodes/status
+        verbs:
+          - patch
+      - apiGroups:
+          - ""
+        resources:
+          - services
+        verbs:
+          - list
+          - patch
+          - update
+          - watch
+      - apiGroups:
+          - ""
+        resources:
+          - services/status
+        verbs:
+          - list
+          - patch
+          - update
+          - watch
+      - apiGroups:
+          - ""
+        resources:
+          - serviceaccounts
+        verbs:
+          - create
+          - get
+      - apiGroups:
+          - ""
+        resources:
+          - persistentvolumes
+        verbs:
+          - get
+          - list
+          - update
+          - watch
+      - apiGroups:
+          - ""
+        resources:
+          - endpoints
+        verbs:
+          - create
+          - get
+          - list
+          - watch
+          - update
+      - apiGroups:
+          - coordination.k8s.io
+        resources:
+          - leases
+        verbs:
+          - create
+          - get
+          - list
+          - watch
+          - update
+          - patch
+      - apiGroups:
+          - ""
+        resources:
+          - serviceaccounts/token
+        verbs:
+          - create
+EOT
 
     machine_pools {
       name     = local.control_plane_pool.name
