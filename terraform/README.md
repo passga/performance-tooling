@@ -3,194 +3,179 @@
 ![Platform](https://img.shields.io/badge/Platform-Rancher-green)
 ![Cloud](https://img.shields.io/badge/Cloud-AWS-orange)
 
-# terraform-aws-platform
+# terraform
 
-## Overview
+## Purpose
 
-This repository demonstrates how to build a Rancher-managed Kubernetes platform on AWS using Terraform.
+This directory contains the staged Terraform roots used to execute the validated platform workflow in this repository.
 
-The platform automatically provisions:
+This README is intentionally operational:
 
-- AWS infrastructure (VPC, security groups, EC2 instances)
-- a bootstrap Kubernetes cluster using k3s
-- Rancher installed via Helm
-- Rancher ingress TLS via cert-manager and Let's Encrypt
-- a downstream RKE2 Kubernetes cluster
-- control plane and worker nodes managed by Rancher machine pools
-- Rancher project and namespace resources after the downstream cluster is ready
+- it documents which Terraform roots to run
+- it documents the required execution order
+- it documents the downstream IAM prerequisite
+- it documents the validated ingress and NLB behavior
 
-The goal is to demonstrate a reproducible platform engineering workflow using Infrastructure as Code.
+For the high-level architecture and project outcomes, use the repository root README.
 
+## Terraform Roots
 
-## Architecture
+### `terraform/aws-root`
 
-This project uses a staged Terraform design because the Kubernetes API, Helm resources, Rancher bootstrap, and downstream cluster provisioning depend on each other in sequence.
+Creates the base AWS infrastructure for the bootstrap path and provisions the bootstrap EC2 node that installs k3s.
 
-```text
-                         +----------------------------------+
-                         |             AWS                  |
-                         |----------------------------------|
-                         | VPC / Subnet / Security Group    |
-                         | EC2 for k3s management node      |
-                         | EC2 for downstream RKE2 nodes    |
-                         +----------------+-----------------+
-                                          |
-                                          v
-                         +----------------------------------+
-                         |     k3s Bootstrap Cluster        |
-                         |----------------------------------|
-                         | cert-manager                     |
-                         | ClusterIssuer (Let's Encrypt)    |
-                         | Rancher installed with Helm      |
-                         +----------------+-----------------+
-                                          |
-                                          v
-                         +----------------------------------+
-                         |            Rancher               |
-                         |----------------------------------|
-                         | Cloud credential / node templates|
-                         | Machine provisioning on AWS      |
-                         | Cluster management API/UI        |
-                         +----------------+-----------------+
-                                          |
-                                          v
-                         +----------------------------------+
-                         |     Downstream RKE2 Cluster      |
-                         |----------------------------------|
-                         | Control plane nodes              |
-                         | Worker nodes                     |
-                         | Managed from Rancher             |
-                         +----------------------------------+
-```
-## Resulting Rancher Cluster
+Main outcome:
 
-Example of the Rancher-managed downstream RKE2 cluster created by this project.
+- AWS network resources
+- bootstrap EC2 instance
+- retrieved kubeconfig for the bootstrap k3s cluster
 
-![Rancher Cluster Dashboard](docs/rancher-cluster-dashboard.png)
+### `terraform/platform/platform-cert-manager-root`
 
-## Provisioning Workflow
+Installs cert-manager into the bootstrap k3s cluster.
 
-1. Terraform provisions AWS networking and an EC2 instance for the bootstrap management node.
-2. The bootstrap node installs k3s and exposes a kubeconfig for follow-up Terraform stages.
-3. Terraform installs cert-manager into the k3s cluster.
-4. Terraform creates a Let's Encrypt production `ClusterIssuer`.
-5. Terraform creates the Rancher TLS `Certificate`, installs the Rancher Helm chart with `ingress.tls.source=secret`, waits for trusted API readiness, and bootstraps Rancher.
-6. Terraform connects to the Rancher API, configures machine provisioning, and requests a downstream cluster.
-7. Terraform waits until the downstream cluster is ready in both the provisioning and management APIs.
-8. Terraform creates Rancher project and namespace resources only after the downstream cluster is fully ready.
+Main outcome:
 
-## Repository Layout
+- cert-manager controllers running on the bootstrap cluster
 
-```text
-terraform/
-├── aws-root/                          # AWS network + k3s bootstrap node
-├── platform/platform-cert-manager-root/ # cert-manager installation
-├── platform/platform-issuer-root/       # Let's Encrypt ClusterIssuer
-├── rancher/rancher-server-root/         # Rancher installation and bootstrap
-├── rancher/downstream-rke2-root/        # Downstream RKE2 cluster provisioning
-├── rancher/downstream-project-root/     # Rancher project + namespace after cluster readiness
-└── modules/                             # Reusable Terraform modules
-```
+### `terraform/platform/platform-issuer-root`
 
-## Prerequisites
+Creates the Let's Encrypt `ClusterIssuer` used for Rancher TLS on the bootstrap cluster.
 
-- Terraform `>= 1.6`
-- AWS account and credentials with permission to create VPC, security groups, and EC2 resources
-- An existing EC2 key pair and access to its private key for bootstrap SSH
-- `kubectl`, `helm`, and `scp` available on the operator machine
-- A public DNS name for Rancher, or a dynamic hostname such as `nip.io`
-- Port `80` reachable for Let's Encrypt HTTP-01 validation when using automatic TLS
+Main outcome:
 
-## AWS Authentication
+- bootstrap cluster `ClusterIssuer` ready for Rancher certificate issuance
 
-Terraform AWS resources use the standard AWS credential chain. The simplest local option is environment variables:
+### `terraform/rancher/rancher-server-root`
 
-```bash
-export AWS_ACCESS_KEY_ID="YOUR_ACCESS_KEY_ID"
-export AWS_SECRET_ACCESS_KEY="YOUR_SECRET_ACCESS_KEY"
-export AWS_DEFAULT_REGION="eu-west-3"
-```
+Installs Rancher on the bootstrap cluster, creates the Rancher TLS certificate, waits for trusted API readiness, and bootstraps the Rancher admin/API state.
 
-If you use temporary credentials, also export:
+Main outcome:
 
-```bash
-export AWS_SESSION_TOKEN="YOUR_SESSION_TOKEN"
-```
+- Rancher reachable on the bootstrap cluster
+- Rancher API bootstrapped and ready for downstream provisioning
 
-You can also use `AWS_PROFILE` with `~/.aws/credentials`.
+### `terraform/rancher/downstream-rke2-root`
 
-For downstream cluster provisioning, Rancher also needs AWS credentials to create EC2 machines. In `terraform/rancher/downstream-rke2-root`, choose one of these approaches:
-- set `cloud_credential_id` to reuse an existing Rancher cloud credential
-- or set `access_key` and `secret_key` in `env/dev.tfvars`
+Creates the Rancher-managed downstream RKE2 cluster on AWS.
 
-## Security Hygiene
+Validated downstream behavior:
 
-- Do not commit generated files such as `*.tfstate`, `*.tfstate.*`, `env/*.tfvars`, or kubeconfig files.
-- Treat Terraform state, backup state, and kubeconfig files as sensitive because they can contain passwords, API tokens, cloud credentials, cluster registration tokens, and client key material.
-- If you accidentally create those files inside the repository while testing, remove them from the working tree before sharing or publishing the project.
+- `machine_global_config` includes `cloud-provider-name = "aws"`
+- control-plane selector uses `disable-cloud-controller = true`
+- control-plane selector uses `kube-controller-manager-arg = ["cloud-provider=external"]`
+- control-plane selector uses `kubelet-arg = ["cloud-provider=external"]`
+- worker selector uses `kubelet-arg = ["cloud-provider=external"]`
+- `aws-cloud-controller-manager` is installed as part of the downstream cluster path
 
-## How To Deploy
+This is the current validated AWS cloud-provider configuration for the downstream cluster.
 
-Use the example tfvars files in each Terraform root as the starting point.
+### `terraform/rancher/downstream-ingress-root`
 
-### 1. Provision AWS and bootstrap k3s
+Customizes the packaged RKE2 Traefik deployment in the downstream cluster.
+
+Validated behavior:
+
+- uses `HelmChartConfig` named `rke2-traefik` in `kube-system`
+- sets `service.type = LoadBalancer`
+- applies AWS NLB annotations to the Traefik Service
+
+Main outcome:
+
+- Traefik exposed through a Kubernetes `LoadBalancer` Service
+- AWS NLB created for that Service
+
+### `terraform/platform/platform-argocd-root`
+
+Deploys Argo CD into the downstream cluster and exposes it through Traefik ingress.
+
+Main outcome:
+
+- Argo CD installed in the downstream cluster
+- Argo CD reachable through Traefik once ingress and DNS or host-header testing are in place
+
+### `terraform/rancher/downstream-project-root`
+
+Creates Rancher project and namespace resources after the downstream cluster is ready.
+
+Main outcome:
+
+- post-cluster Rancher project and namespace resources created against the validated downstream cluster
+
+## Recommended Apply Order
+
+Run the Terraform roots in this order:
+
+1. `terraform/aws-root`
+2. `terraform/platform/platform-cert-manager-root`
+3. `terraform/platform/platform-issuer-root`
+4. `terraform/rancher/rancher-server-root`
+5. `terraform/rancher/downstream-rke2-root`
+6. `terraform/rancher/downstream-ingress-root`
+7. `terraform/platform/platform-argocd-root`
+8. `terraform/rancher/downstream-project-root`
+
+Before running these roots, create a local `env/dev.tfvars` from the `env/dev.tfvars.example` file present in each root that needs one.
+
+Example execution sequence:
 
 ```bash
 cd terraform/aws-root
 terraform init
 terraform apply -var-file=env/dev.tfvars
-```
 
-This stage creates the AWS network, the management EC2 instance, installs k3s, and writes the kubeconfig used by the next stages.
-
-### 2. Install cert-manager
-
-```bash
 cd terraform/platform/platform-cert-manager-root
 terraform init
 terraform apply -var-file=env/dev.tfvars
-```
 
-### 3. Create the Let's Encrypt issuer
-
-```bash
 cd terraform/platform/platform-issuer-root
 terraform init
 terraform apply -var-file=env/dev.tfvars
-```
 
-### 4. Install Rancher
-
-```bash
 cd terraform/rancher/rancher-server-root
 terraform init
 terraform apply -var-file=env/dev.tfvars
-```
 
-### 5. Provision the downstream RKE2 cluster
-
-```bash
 cd terraform/rancher/downstream-rke2-root
 terraform init
 terraform apply -var-file=env/dev.tfvars
-```
 
-### 6. Create Rancher project and namespace
+cd terraform/rancher/downstream-ingress-root
+terraform init
+terraform apply -var-file=env/dev.tfvars
 
-```bash
+cd terraform/platform/platform-argocd-root
+terraform init
+terraform apply -var-file=env/dev.tfvars
+
 cd terraform/rancher/downstream-project-root
 terraform init
 terraform apply -var-file=env/dev.tfvars
 ```
 
-The result is a Rancher-managed downstream RKE2 cluster with project and namespace resources created only after the cluster is actually ready.
+## Recommended Destroy Order
 
-## How To Destroy The Infrastructure
+Destroy in reverse order:
 
-Destroy in reverse order to avoid dependency and remote-state issues.
+1. `terraform/rancher/downstream-project-root`
+2. `terraform/platform/platform-argocd-root`
+3. `terraform/rancher/downstream-ingress-root`
+4. `terraform/rancher/downstream-rke2-root`
+5. `terraform/rancher/rancher-server-root`
+6. `terraform/platform/platform-issuer-root`
+7. `terraform/platform/platform-cert-manager-root`
+8. `terraform/aws-root`
+
+Example destroy sequence:
 
 ```bash
 cd terraform/rancher/downstream-project-root
+terraform destroy -var-file=env/dev.tfvars
+
+cd terraform/platform/platform-argocd-root
+terraform destroy -var-file=env/dev.tfvars
+
+cd terraform/rancher/downstream-ingress-root
 terraform destroy -var-file=env/dev.tfvars
 
 cd terraform/rancher/downstream-rke2-root
@@ -209,94 +194,104 @@ cd terraform/aws-root
 terraform destroy -var-file=env/dev.tfvars
 ```
 
-## Notes
+## IAM And Instance Profile Prerequisites For Downstream Nodes
 
-- Terraform roots are intentionally separated to handle bootstrap sequencing cleanly.
-- Rancher TLS is managed by cert-manager. The Rancher Helm chart consumes a pre-created secret and does not manage Let's Encrypt itself.
-- The downstream cluster can either reuse AWS network data from `aws-root` remote state or accept dedicated AWS networking values.
-- `rancher-server-root` waits for the cert-manager `Certificate`, trusted HTTPS, and a successful bootstrap login before `rancher2_bootstrap`.
-- `downstream-rke2-root` creates only the Rancher cloud credential and `rancher2_cluster_v2`; project and namespace creation lives in `downstream-project-root`.
-- This repository is designed as a practical platform engineering portfolio project rather than production-ready infrastructure.
+Downstream node IAM remains a manual prerequisite for the validated setup.
 
+You must create in AWS before running `terraform/rancher/downstream-rke2-root`:
 
-## TLS and Let's Encrypt Considerations
+- one EC2 IAM role for downstream RKE2 nodes
+- one EC2 instance profile associated with that role
+- the validated custom policy `infra-dev-rke2-cloud-provider-aws` attached to that downstream node role
 
-Rancher is exposed through an ingress secured with TLS certificates issued by **Let's Encrypt** via **cert-manager**.
+The Terraform and Rancher code in this repository do not create that downstream node IAM role or instance profile for you.
 
-During startup, the ingress controller (Traefik) initially serves a temporary self-signed certificate:
+Operational requirements:
 
-```
-TRAEFIK DEFAULT CERT
-```
+- `downstream_node_instance_profile_name` must be the instance profile name
+- do not pass an instance profile ARN
+- the AWS identity used by Terraform or by the Rancher cloud credential must have `iam:PassRole` on the downstream node role
+- the Terraform AWS identity must have `iam:GetInstanceProfile` on the existing instance profile
 
-This certificate is used until cert-manager successfully obtains a valid certificate from Let's Encrypt and attaches it to the Rancher ingress.
+Validated practical note:
 
-### Important for Downstream RKE2 Nodes
+- the missing permission observed in practice was `ec2:CreateTags` on `security-group/*`
+- when that permission was missing, `rke2-traefik` stayed in `EXTERNAL-IP: pending`
+- the NLB did not complete reconciliation until that permission was available through `infra-dev-rke2-cloud-provider-aws`
 
-When Rancher provisions downstream RKE2 nodes, those nodes must connect back to the Rancher server over HTTPS to register themselves.
+## Notes About Downstream Ingress, Traefik, And The NLB
 
-For this to succeed:
+The validated downstream ingress path is:
 
-- the Rancher certificate must be issued
-- the certificate must be served by the ingress
-- the certificate must be signed by a CA trusted by the node OS
-
-If the certificate chain cannot be validated, node registration may fail with errors such as:
-
-```
-curl: (60) SSL certificate problem: unable to get local issuer certificate
-```
-
-### Why Production Certificates Matter
-
-For the full Rancher-to-RKE2 registration flow, downstream nodes must trust the Rancher endpoint with the OS trust store. Let's Encrypt staging certificates are not trusted by default, so this repository uses a Let's Encrypt production `ClusterIssuer` for the complete join flow.
-
-### Verifying Rancher TLS
-
-Check the certificate served by Rancher:
-
-```bash
-echo | openssl s_client -connect rancher.<ip>.nip.io:443 -servername rancher.<ip>.nip.io 2>/dev/null | openssl x509 -noout -issuer -subject -dates
+```text
+Traefik packaged with RKE2
+-> customized by HelmChartConfig in terraform/rancher/downstream-ingress-root
+-> Service type LoadBalancer
+-> aws-cloud-controller-manager / AWS cloud provider integration
+-> AWS Network Load Balancer
 ```
 
-Example expected output:
+Operational notes:
 
-```
-issuer=C = US, O = Let's Encrypt, CN = R3
-subject=CN = rancher.<ip>.nip.io
-```
+- do not recreate `kube-system/rke2-traefik` as a separate Terraform-managed `Service`
+- customize Traefik through `HelmChartConfig` named `rke2-traefik`
+- `aws-cloud-controller-manager` is part of the validated downstream cluster path
+- the current validated path does not require any separate controller for this NLB workflow
+- a `404` from the NLB before any ingress exists is expected and only means Traefik has no matching route yet
 
-### Checking Certificate Status in Kubernetes
+Argo CD is validated on top of that path through `terraform/platform/platform-argocd-root`, where it is exposed by a Traefik ingress in the downstream cluster.
 
-Verify that cert-manager successfully issued the certificate:
+## Troubleshooting Notes
 
-```bash
-kubectl -n cattle-system get certificate
-```
+### Downstream nodes are not created by Rancher
 
-Expected:
+Check:
 
-```
-NAME                  READY   SECRET
-tls-rancher-ingress   True    tls-rancher-ingress
-```
+- the instance profile exists in AWS
+- `downstream_node_instance_profile_name` is the instance profile name, not an ARN
+- the AWS identity used by Terraform or Rancher has `iam:PassRole`
+- Terraform can read the instance profile with `iam:GetInstanceProfile`
 
-You can also inspect details:
+### `rke2-traefik` stays in `EXTERNAL-IP: pending`
 
-```bash
-kubectl -n cattle-system describe issuer rancher
-kubectl -n cattle-system describe certificate tls-rancher-ingress
-```
+Check:
 
-### Key Takeaway
+- the downstream node role has the validated policy `infra-dev-rke2-cloud-provider-aws`
+- that policy includes the missing permission seen in practice: `ec2:CreateTags` on `security-group/*`
+- `terraform/rancher/downstream-ingress-root` has been applied
+- Traefik is still being customized through `HelmChartConfig`, not by replacing the packaged Service
 
-Even if the Rancher API responds successfully (for example `/ping` returns `pong`), downstream cluster provisioning may still fail if the TLS certificate chain is not trusted by the nodes.
+### NLB returns `404`
 
-Ensuring a valid and trusted TLS certificate for Rancher is therefore a critical step in the provisioning workflow.
+Check:
 
+- the NLB already points to the Traefik `LoadBalancer` Service
+- an ingress exists for the hostname or path you are testing
 
-## Disclaimer
+This is expected before any matching ingress route exists.
 
-This repository is a **learning and experimentation project** designed to demonstrate a platform engineering workflow using Terraform, Rancher, and RKE2.
+### `kube-apiserver` fails with `unknown flag: --cloud-provider`
 
-It is **not intended to represent production-ready infrastructure**.
+Do not use:
+
+- `kube-apiserver-arg = ["cloud-provider=external"]`
+
+This is not part of the validated setup and breaks startup.
+
+### `kubelet` fails when worker node labels are forced
+
+Do not use:
+
+- `node-labels=node-role.kubernetes.io/worker=true`
+
+This is not part of the validated setup and caused kubelet startup failure in practice.
+
+### Downstream registration fails even though Rancher is reachable
+
+Check:
+
+- Rancher TLS has been issued successfully
+- the Rancher endpoint serves the expected certificate chain
+- downstream nodes trust the CA chain served by Rancher
+
+TLS trust between Rancher and downstream nodes still matters for node registration.

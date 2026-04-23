@@ -60,4 +60,3 @@ variable "k3s_version" {
 locals {
   admin_cidr_norm = can(cidrnetmask(var.admin_cidr)) ? var.admin_cidr : "${var.admin_cidr}/32"
 }
-

@@ -7,14 +7,10 @@ data "terraform_remote_state" "aws_root" {
   }
 }
 
-data "terraform_remote_state" "rancher_server" {
+data "terraform_remote_state" "downstream_rke2" {
   backend = "local"
 
   config = {
-    path = "../rancher-server-root/terraform.tfstate"
+    path = "../downstream-rke2-root/terraform.tfstate"
   }
-}
-
-data "aws_iam_instance_profile" "downstream_nodes" {
-  name = var.downstream_node_instance_profile_name
 }

@@ -1,8 +1,23 @@
 # Local resources
 
+locals {
+  normalized_prefix        = trimspace(var.prefix)
+  cluster_name_has_prefix  = local.normalized_prefix != "" && (var.workload_cluster_name == local.normalized_prefix || startswith(var.workload_cluster_name, "${local.normalized_prefix}-") || endswith(var.workload_cluster_name, "-${local.normalized_prefix}") || strcontains(var.workload_cluster_name, "-${local.normalized_prefix}-"))
+  kubeconfig_filename_base = local.cluster_name_has_prefix || local.normalized_prefix == "" ? var.workload_cluster_name : "${local.normalized_prefix}-${var.workload_cluster_name}"
+  kubeconfig_filename      = "${local.kubeconfig_filename_base}-kubeconfig.yaml"
+  downstream_ec2_tags = {
+    "tf-aws-platform-cluster"   = var.workload_cluster_name
+    "tf-aws-platform-component" = "downstream-rke2"
+    "tf-aws-platform-managed"   = "true"
+  }
+  downstream_ec2_tags_csv = join(",", flatten([
+    for key in sort(keys(local.downstream_ec2_tags)) : [key, local.downstream_ec2_tags[key]]
+  ]))
+}
+
 # Save kubeconfig locally without storing the content in plaintext state.
 resource "local_sensitive_file" "kube_config_workload_yaml" {
-  filename = format("%s/%s", path.root, "kube_config_workload.yaml")
+  filename = format("%s/%s", path.root, local.kubeconfig_filename)
   content  = rancher2_cluster_v2.cluster.kube_config
 }
 
@@ -27,3 +42,8 @@ locals {
   aws_zone_suffix    = trimprefix(var.aws_zone, var.aws_region)
 }
 
+locals {
+  cloud_credential_id = (
+  var.cloud_credential_id != null && trimspace(var.cloud_credential_id) != ""
+  ) ? trimspace(var.cloud_credential_id) : rancher2_cloud_credential.node[0].id
+}
