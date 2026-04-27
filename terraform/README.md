@@ -112,7 +112,7 @@ Destroy in reverse order:
 7. `terraform/platform/platform-cert-manager-root`
 8. `terraform/aws-root`
 
-Do not include `terraform/platform/platform-public-dns-root` in normal cluster destroy workflows. That root owns the persistent delegated Route53 hosted zone for `infra.garciapass.fr` and uses `prevent_destroy` so it survives downstream cluster redeploys.
+Do not include `terraform/platform/platform-public-dns-root` in normal cluster destroy workflows. That root owns the persistent delegated Route53 hosted zone for downstream applications and uses `prevent_destroy` so it survives downstream cluster redeploys.
 
 Example destroy sequence:
 
@@ -171,7 +171,7 @@ Validated practical note:
 
 Route53 permissions for `terraform/platform/platform-public-dns-root` are a separate IAM prerequisite from the downstream node IAM role and instance profile requirements above.
 
-These permissions are required before creating the delegated hosted zone `infra.garciapass.fr`.
+These permissions are required before creating the Route53 hosted zone for the delegated public subdomain used by downstream applications.
 
 Validated practical note:
 
@@ -222,7 +222,7 @@ The delegated public DNS root is `terraform/platform/platform-public-dns-root`.
 
 It is intentionally generic and not coupled to Argo CD:
 
-- it creates a public Route53 hosted zone for `infra.garciapass.fr`
+- it creates a public Route53 hosted zone for downstream applications
 - it protects that hosted zone with `prevent_destroy`
 - it manages downstream application DNS entries through a variable-driven `app_records` map
 - it creates Route53 `CNAME` records that default to the current downstream Traefik LoadBalancer hostname from `terraform/rancher/downstream-ingress-root`
@@ -238,7 +238,7 @@ The root reads this output automatically from `terraform/rancher/downstream-ingr
 
 - `traefik_load_balancer_hostname`
 
-The initial `env/dev.tfvars.example` shows an `argocd-dev.infra.garciapass.fr` record that only sets `fqdn`, because the CNAME target defaults to the current downstream Traefik hostname.
+The initial `env/dev.tfvars.example` shows an application record such as `app.example.test` that only sets `fqdn`, because the CNAME target defaults to the current downstream Traefik hostname.
 
 ### Public DNS Operator Workflow
 
@@ -248,7 +248,8 @@ Use this workflow for the initial setup:
 2. Set `app_records` in `terraform/platform/platform-public-dns-root/env/dev.tfvars`.
 3. Apply `terraform/platform/platform-public-dns-root`.
 4. Read `hosted_zone_name_servers` from `platform-public-dns-root`.
-5. In OVH, delegate `infra.garciapass.fr` once by replacing its authoritative name servers with the Route53 name servers from `hosted_zone_name_servers`.
+5. In the parent DNS provider, add NS records for the delegated public subdomain in the parent DNS zone and point them to the Route53 name servers from `hosted_zone_name_servers`.
+6. Do not change the parent domain name servers themselves.
 
 Use this workflow when the downstream NLB changes after a redeploy:
 
@@ -257,7 +258,7 @@ Use this workflow when the downstream NLB changes after a redeploy:
 
 Standard records that rely on the default target follow the current Traefik NLB automatically. Only records using explicit target override fields need manual target updates.
 
-Do not destroy `terraform/platform/platform-public-dns-root` as part of normal cluster teardown, and do not change OVH again after the initial delegation unless you intentionally recreate the hosted zone.
+Do not destroy `terraform/platform/platform-public-dns-root` as part of normal cluster teardown, and do not change the parent DNS delegation again after the initial setup unless you intentionally recreate the hosted zone.
 
 TLS is intentionally out of scope for this root. Argo CD and future application certificate management should be handled in a separate change.
 
