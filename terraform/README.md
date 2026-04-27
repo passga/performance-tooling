@@ -28,6 +28,7 @@ For the high-level architecture and project outcomes, use the repository root RE
 | `terraform/rancher/rancher-server-root` | Install and bootstrap Rancher on the bootstrap cluster | After issuer, before downstream cluster creation |
 | `terraform/rancher/downstream-rke2-root` | Provision the Rancher-managed downstream RKE2 cluster on AWS | After Rancher is healthy and downstream IAM is ready |
 | `terraform/rancher/downstream-ingress-root` | Customize packaged Traefik with `HelmChartConfig` and expose it through `LoadBalancer` | After the downstream cluster is ready |
+| `terraform/platform/platform-public-dns-root` | Create and retain the delegated Route53 public zone and manage generic downstream app alias records | After downstream ingress is in place, before or alongside app-specific DNS usage |
 | `terraform/platform/platform-argocd-root` | Install Argo CD and expose it through Traefik ingress | After downstream ingress is in place |
 | `terraform/rancher/downstream-project-root` | Create Rancher project and namespace resources | Last, after downstream cluster registration is complete |
 
@@ -52,8 +53,9 @@ Run the Terraform roots in this order:
 4. `terraform/rancher/rancher-server-root`
 5. `terraform/rancher/downstream-rke2-root`
 6. `terraform/rancher/downstream-ingress-root`
-7. `terraform/platform/platform-argocd-root`
-8. `terraform/rancher/downstream-project-root`
+7. `terraform/platform/platform-public-dns-root`
+8. `terraform/platform/platform-argocd-root`
+9. `terraform/rancher/downstream-project-root`
 
 Example execution sequence:
 
@@ -82,6 +84,10 @@ cd terraform/rancher/downstream-ingress-root
 terraform init
 terraform apply -var-file=env/dev.tfvars
 
+cd terraform/platform/platform-public-dns-root
+terraform init
+terraform apply -var-file=env/dev.tfvars
+
 cd terraform/platform/platform-argocd-root
 terraform init
 terraform apply -var-file=env/dev.tfvars
@@ -105,6 +111,8 @@ Destroy in reverse order:
 6. `terraform/platform/platform-issuer-root`
 7. `terraform/platform/platform-cert-manager-root`
 8. `terraform/aws-root`
+
+Do not include `terraform/platform/platform-public-dns-root` in normal cluster destroy workflows. That root owns the persistent delegated Route53 hosted zone for `infra.garciapass.fr` and uses `prevent_destroy` so it survives downstream cluster redeploys.
 
 Example destroy sequence:
 
@@ -180,6 +188,28 @@ Operational notes:
 - a `404` from the NLB before any ingress exists is expected and only means Traefik has no matching route yet
 
 Argo CD is validated on top of that path through `terraform/platform/platform-argocd-root`, where it is exposed by a Traefik ingress in the downstream cluster.
+
+## Persistent Public DNS Layer
+
+The delegated public DNS root is `terraform/platform/platform-public-dns-root`.
+
+It is intentionally generic and not coupled to Argo CD:
+
+- it creates a public Route53 hosted zone for `infra.garciapass.fr`
+- it protects that hosted zone with `prevent_destroy`
+- it manages downstream application DNS entries through a variable-driven `app_records` map
+- it creates Route53 alias `A` records that target the downstream Traefik AWS NLB or any future compatible AWS load balancer
+
+Operational model:
+
+- configure OVH once to delegate `infra.garciapass.fr` to the Route53 name servers output by `platform-public-dns-root`
+- keep the hosted zone persistent even if the downstream cluster is destroyed and recreated
+- when the downstream NLB changes after a redeploy, update only the Route53 alias record targets in `platform-public-dns-root`
+
+The initial `env/dev.tfvars.example` shows an `argocd-dev.infra.garciapass.fr` alias that points to the downstream Traefik NLB by consuming these outputs from `terraform/rancher/downstream-ingress-root`:
+
+- `traefik_load_balancer_hostname`
+- `traefik_load_balancer_zone_id`
 
 In practice, the validation sequence is:
 

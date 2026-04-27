@@ -19,6 +19,7 @@ The validated implementation covers:
 - Traefik customized through `HelmChartConfig`
 - Traefik exposed as `Service` type `LoadBalancer`
 - AWS Network Load Balancer reconciliation
+- delegated public DNS in Route53 for downstream applications
 - Argo CD exposed through Traefik ingress
 
 ## Validated Architecture
@@ -63,6 +64,7 @@ The validated implementation covers:
 +-----------------------------------------------------------------------------------+
 |                                  Ingress traffic                                  |
 |-----------------------------------------------------------------------------------|
+| Route53 delegated subdomain for downstream app hostnames                          |
 | Argo CD exposed through Traefik ingress                                           |
 | Validated through the AWS NLB with the expected Host header before DNS wiring     |
 +-----------------------------------------------------------------------------------+
@@ -77,6 +79,7 @@ With the current validated code path, this repository demonstrates:
 - a Rancher-managed downstream RKE2 cluster on AWS
 - external AWS cloud-provider integration through `aws-cloud-controller-manager`
 - Traefik exposed by a Kubernetes `LoadBalancer` Service and reconciled to an AWS NLB
+- a persistent Route53 delegated public DNS layer for downstream application hostnames
 - downstream application exposure through Traefik ingress
 - Argo CD deployed in the downstream cluster and validated through the AWS NLB with the expected Host header before DNS wiring
 - Rancher project and namespace resources created after cluster readiness
@@ -101,3 +104,5 @@ terraform/
 ```
 
 Use [terraform/README.md](terraform/README.md) as the operational guide for Terraform root order, apply and destroy steps, prerequisites, IAM setup, ingress behavior, and troubleshooting.
+
+For public DNS, the delegated subdomain is `infra.garciapass.fr`. OVH only needs a one-time NS delegation to the Route53 hosted zone created by `terraform/platform/platform-public-dns-root`. After that, downstream application DNS changes happen only in Route53, and the hosted zone is intentionally kept persistent across downstream cluster redeploys.
