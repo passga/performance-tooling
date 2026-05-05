@@ -28,6 +28,7 @@ resource "null_resource" "wait_for_traefik_load_balancer_hostname" {
 
   triggers = {
     kubeconfig_path = local.kubeconfig_path
+    kubeconfig_sha  = filesha256(local.kubeconfig_path)
     namespace       = "kube-system"
     service_name    = "rke2-traefik"
     timeout_seconds = "600"
