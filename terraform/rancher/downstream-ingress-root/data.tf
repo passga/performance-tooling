@@ -12,5 +12,8 @@ data "kubernetes_service" "rke2_traefik" {
     namespace = "kube-system"
   }
 
-  depends_on = [kubernetes_manifest.rke2_traefik_config]
+  depends_on = [
+    kubernetes_manifest.rke2_traefik_config,
+    null_resource.wait_for_traefik_load_balancer_hostname,
+  ]
 }
